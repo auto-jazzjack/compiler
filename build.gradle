@@ -1,0 +1,19 @@
+plugins {
+    id 'java'
+}
+
+group = 'io.penguin.compiler'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '11'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly('org.projectlombok:lombok:1.18.12')
+    annotationProcessor('org.projectlombok:lombok:1.18.12')
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.13.0'
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
+
+}

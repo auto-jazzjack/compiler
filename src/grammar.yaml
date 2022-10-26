@@ -1,0 +1,16 @@
+generator:
+  v1:
+    Start:
+      - '%Decl'
+    Identifier:
+      - dummy
+    Decl:
+      - '%Modifier Class_Decl'
+    Class_Decl:
+      - 'class'
+    Modifier:
+      - public
+      - private
+      - protected
+    Int_Decl:
+      - "int %Identifier ;"
