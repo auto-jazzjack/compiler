@@ -102,13 +102,11 @@ public class ParseTable {
         Grammar grammars = ParseTableGenerator.readFile("");
         for (Map.Entry<String, List<String>> grammar : grammars.getGenerator().getV1().entrySet()) {
 
-            grammar.getValue().forEach(j -> {
-                cached.put(CacheKey.builder()
-                        .readIdx(0)
-                        .gramKey(grammar.getKey())
-                        .gramValue(Arrays.stream(j.split(" ")).collect(Collectors.toList()))
-                        .build(), 0);
-            });
+            grammar.getValue().forEach(j -> cached.put(CacheKey.builder()
+                    .readIdx(0)
+                    .gramKey(grammar.getKey())
+                    .gramValue(Arrays.stream(j.split(" ")).collect(Collectors.toList()))
+                    .build(), 0));
 
         }
         updateTableUntilNoChange();
