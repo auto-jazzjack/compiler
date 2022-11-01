@@ -5,7 +5,7 @@ generator:
     Identifier:
       - dummy
     Decl:
-      - '%Modifier Class_Decl'
+      - '%Modifier %Class_Decl'
     Class_Decl:
       - 'class'
     Modifier:

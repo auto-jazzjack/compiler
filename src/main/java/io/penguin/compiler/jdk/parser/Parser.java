@@ -23,22 +23,21 @@ public class Parser {
 
     public AbstractTree createAST(String code) {
 
-        int state_ = 0;
+        Integer state_ = 0;
         AtomicInteger idx = new AtomicInteger(0);
         Integer res = 0;
         for (int i = 0; i < code.length(); i++) {
             Token tmp = sc.readToken(code, idx);
             stack.add(tmp);
 
-            if (tmp == null) {
-                System.out.println();
-            }
             //지금 상태에서 token을 보고 문법을 결정.
             res = table.getNextState(state_, tmp.getTokenNumber());
-
+            state_ = res;
             if (res == null) {
 
+                System.out.println();
             } else {
+                System.out.println(res);
                 if (res > 0) {
                     //this is reduction
                 } else if (res < 0) {
