@@ -19,8 +19,10 @@ public class ParseTable {
     //grammar do not need to be changed.
     private Map<Integer/*state*/, Map<Integer/*token*/, Integer/*next state*/>> table;
     private Map<CacheKey, Integer> cached;
+    private static Map<String, Integer> NON_TERMINAL_MAP = new HashMap<>();
 
     private AtomicInteger maxState;
+    private AtomicInteger maxNonTerminalValue;
 
     @Data
     @Builder
@@ -29,25 +31,33 @@ public class ParseTable {
         private Integer readIdx;
         private String gramKey;
 
-        public Integer getTokenNumberOrState(Map<CacheKey, Integer> cached, AtomicInteger maxState) {
+
+        public Integer getTokenOrNonTerminal(Map<CacheKey, Integer> cached, AtomicInteger maxState) {
 
             String s = gramValue.get(readIdx);
             if (s.startsWith("%")) {
-                //This is non terminal node
+                NON_TERMINAL_MAP.putIfAbsent(s,
+                        NON_TERMINAL_MAP.values().stream()
+                                .min(Integer::compareTo)
+                                .orElse(0) - 1
+                );
+                //This is nonterminal node
                 CacheKey cacheKey = increaseIdxWithDeepCopy();
                 if (!cached.containsKey(cacheKey)) {
                     cached.put(cacheKey, maxState.incrementAndGet());
                 }
-                return -cached.get(cacheKey);
+                return NON_TERMINAL_MAP.get(s);//-cached.get(cacheKey);
             } else {
                 return TOKEN_MAP.get(gramValue.get(readIdx)).getTokenNumber();
             }
         }
 
         public CacheKey increaseIdxWithDeepCopy() {
+
             if (readIdx + 1 > gramValue.size()) {
                 return null;
             }
+
             return CacheKey.builder()
                     .gramKey(gramKey)
                     .readIdx(readIdx + 1)
@@ -59,15 +69,17 @@ public class ParseTable {
     public ParseTable() throws Exception {
         maxState = new AtomicInteger(0);
         cached = new HashMap<>();
+        maxNonTerminalValue = new AtomicInteger(0);
         init();
     }
 
     public void updateTableUntilNoChange() {
 
-        boolean changed = true;
-        while (changed) {
-            changed = false;
+        int befSize;
 
+        do {
+
+            befSize = cached.size();
             for (Map.Entry<CacheKey, Integer> entry : cached.entrySet()) {
                 CacheKey k = entry.getKey();
 
@@ -77,22 +89,24 @@ public class ParseTable {
                 }
 
                 if (!cached.containsKey(cacheKey)) {
-                    maxState.getAndIncrement();
-                    cached.put(cacheKey, maxState.get());
+                    cached.put(cacheKey, maxState.incrementAndGet());
                     table.putIfAbsent(entry.getValue(), new HashMap<>());
-                    table.get(entry.getValue()).put(entry.getKey().getTokenNumberOrState(cached, maxState), maxState.get());
-                    changed = true;
+                    table.get(entry.getValue()).put(entry.getKey().getTokenOrNonTerminal(cached, maxState),
+                            maxState.get()
+                    );
                     break;
                 } else {
                     Integer state = cached.get(cacheKey);
                     table.putIfAbsent(entry.getValue(), new HashMap<>());
-                    table.get(entry.getValue())
-                            .put(entry.getKey().getTokenNumberOrState(cached, maxState), state);
+                    table.get(entry.getValue()).put(
+                            entry.getKey().getTokenOrNonTerminal(cached, maxState),
+                            state
+                    );
                 }
 
 
             }
-        }
+        } while (befSize != cached.size());
         System.out.println();
     }
 
@@ -115,12 +129,20 @@ public class ParseTable {
 
     //input : current state/token
     //output : next state
-    public Integer getNextState(Integer state, int tokenNumber) {
+    public Integer getNextState(Integer state, int token) {
         try {
-            return table.get(state).get(tokenNumber);
+            return table.get(state).get(token);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    public Integer leftSymbol(Integer ruleNumber) {
+        return null;
+    }
+
+    public Integer rightLength(Integer ruleNumber) {
+        return null;
     }
 
 }
