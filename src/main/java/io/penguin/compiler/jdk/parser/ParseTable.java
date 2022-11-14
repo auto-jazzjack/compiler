@@ -36,10 +36,9 @@ public class ParseTable {
 
             String s = gramValue.get(readIdx);
             if (s.startsWith("%")) {
-                NON_TERMINAL_MAP.putIfAbsent(s,
-                        NON_TERMINAL_MAP.values().stream()
-                                .min(Integer::compareTo)
-                                .orElse(0) - 1
+                NON_TERMINAL_MAP.putIfAbsent(s, NON_TERMINAL_MAP.values().stream()
+                        .min(Integer::compareTo)
+                        .orElse(0) - 1
                 );
                 //This is nonterminal node
                 CacheKey cacheKey = increaseIdxWithDeepCopy();
