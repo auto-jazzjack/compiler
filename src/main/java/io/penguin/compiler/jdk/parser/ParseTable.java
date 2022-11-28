@@ -2,13 +2,12 @@ package io.penguin.compiler.jdk.parser;
 
 
 import io.penguin.compiler.jdk.parser.generator.ParseTableGenerator;
+import io.penguin.compiler.jdk.scanner.Token;
 import lombok.Builder;
 import lombok.Data;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -17,11 +16,12 @@ import static io.penguin.compiler.jdk.scanner.Token.TOKEN_MAP;
 public class ParseTable {
 
     //grammar do not need to be changed.
-    private Map<Integer/*state*/, Map<Integer/*token*/, Integer/*next state*/>> table;
-    private Map<CacheKey, Integer> cached;
-    private static Map<String, Integer> NON_TERMINAL_MAP = new HashMap<>();
+    private Map<Integer/*state*/, Map<Token/*token*/, Integer/*next state*/>> table;
+    private Map<Integer/*state*/, Set<CacheKey>> ruleMap;
+    private final Map<CacheKey, Integer> stateCache;
+    private static final Map<String, Integer> NON_TERMINAL_MAP = new HashMap<>();
 
-    private AtomicInteger maxState;
+    private final AtomicInteger maxState;
     private AtomicInteger maxNonTerminalValue;
 
     @Data
@@ -31,8 +31,7 @@ public class ParseTable {
         private Integer readIdx;
         private String gramKey;
 
-
-        public Integer getTokenOrNonTerminal(Map<CacheKey, Integer> cached, AtomicInteger maxState) {
+        public Token nextTokenOrNonTerminal() {
 
             String s = gramValue.get(readIdx);
             if (s.startsWith("%")) {
@@ -40,14 +39,10 @@ public class ParseTable {
                         .min(Integer::compareTo)
                         .orElse(0) - 1
                 );
-                //This is nonterminal node
-                CacheKey cacheKey = increaseIdxWithDeepCopy();
-                if (!cached.containsKey(cacheKey)) {
-                    cached.put(cacheKey, maxState.incrementAndGet());
-                }
-                return NON_TERMINAL_MAP.get(s);//-cached.get(cacheKey);
+                return new Token(NON_TERMINAL_MAP.get(s), s, s);
+                //NON_TERMINAL_MAP.get(s);//-cached.get(cacheKey);
             } else {
-                return TOKEN_MAP.get(gramValue.get(readIdx)).getTokenNumber();
+                return TOKEN_MAP.get(s);
             }
         }
 
@@ -67,59 +62,75 @@ public class ParseTable {
 
     public ParseTable() throws Exception {
         maxState = new AtomicInteger(0);
-        cached = new HashMap<>();
+        stateCache = new HashMap<>();
         maxNonTerminalValue = new AtomicInteger(0);
         init();
     }
 
+
     public void updateTableUntilNoChange() {
+        AtomicBoolean fin = new AtomicBoolean(true);
 
-        int befSize;
+        while (fin.get()) {
+            fin.set(false);
+            for (Map.Entry<Integer, Set<CacheKey>> entry : ruleMap.entrySet()) {
+                table.putIfAbsent(entry.getKey(), new HashMap<>());
 
-        do {
 
-            befSize = cached.size();
-            for (Map.Entry<CacheKey, Integer> entry : cached.entrySet()) {
-                CacheKey k = entry.getKey();
+                for (CacheKey current : entry.getValue()) {
+                    CacheKey next = current.increaseIdxWithDeepCopy();
 
-                CacheKey cacheKey = k.increaseIdxWithDeepCopy();
-                if (cacheKey == null) {
-                    continue;
+                    if (next == null) {
+                        continue;
+                    }
+
+                    if (!stateCache.containsKey(next)) {
+                        int nextState = maxState.incrementAndGet();
+                        stateCache.put(next, nextState);
+                        ruleMap.computeIfAbsent(nextState, (k) -> {
+                                    fin.set(true);
+                                    return new HashSet<>();
+                                })
+                                .add(next);
+                        table.get(entry.getKey()).putIfAbsent(current.nextTokenOrNonTerminal(), nextState);
+
+                        if (fin.get()) {
+                            break;
+                        }
+                    } else {
+                        Integer state = stateCache.get(next);
+                        table.get(entry.getKey())
+                                .put(current.nextTokenOrNonTerminal(), state);
+                    }
                 }
 
-                if (!cached.containsKey(cacheKey)) {
-                    cached.put(cacheKey, maxState.incrementAndGet());
-                    table.putIfAbsent(entry.getValue(), new HashMap<>());
-                    table.get(entry.getValue()).put(entry.getKey().getTokenOrNonTerminal(cached, maxState),
-                            maxState.get()
-                    );
+                if (fin.get()) {
                     break;
-                } else {
-                    Integer state = cached.get(cacheKey);
-                    table.putIfAbsent(entry.getValue(), new HashMap<>());
-                    table.get(entry.getValue()).put(
-                            entry.getKey().getTokenOrNonTerminal(cached, maxState),
-                            state
-                    );
                 }
-
-
             }
-        } while (befSize != cached.size());
+        }
         System.out.println();
     }
 
     public void init() throws Exception {
         table = new HashMap<>();
+        ruleMap = new HashMap<>();
 
         Grammar grammars = ParseTableGenerator.readFile("");
+
         for (Map.Entry<String, List<String>> grammar : grammars.getGenerator().getV1().entrySet()) {
 
-            grammar.getValue().forEach(j -> cached.put(CacheKey.builder()
-                    .readIdx(0)
-                    .gramKey(grammar.getKey())
-                    .gramValue(Arrays.stream(j.split(" ")).collect(Collectors.toList()))
-                    .build(), 0));
+            grammar.getValue().forEach(j -> {
+                CacheKey cacheKey = CacheKey.builder()
+                        .readIdx(0)
+                        .gramKey(grammar.getKey())
+                        .gramValue(Arrays.stream(j.split(" ")).collect(Collectors.toList()))
+                        .build();
+
+                stateCache.put(cacheKey, 0);
+                ruleMap.computeIfAbsent(0, (k) -> new HashSet<>()).add(cacheKey);
+            });
+
 
         }
         updateTableUntilNoChange();
@@ -128,7 +139,7 @@ public class ParseTable {
 
     //input : current state/token
     //output : next state
-    public Integer getNextState(Integer state, int token) {
+    public Integer getNextState(Integer state, Token token) {
         try {
             return table.get(state).get(token);
         } catch (Exception e) {

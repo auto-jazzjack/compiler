@@ -36,7 +36,7 @@ public class Parser {
 
         while (readIndex.get() < code.length()) {
             currentState = stateStack.get(stateStack.size() - 1);
-            entry = table.getNextState(currentState, token.getTokenNumber());
+            entry = table.getNextState(currentState, token);
             if (entry > 0) {
                 //shift action
                 symbolStack.add(token.getTokenNumber());
@@ -57,7 +57,7 @@ public class Parser {
                     stack.remove(stateStack.size());
                 }
                 lhs = table.leftSymbol(ruleNumber);
-                currentState = table.getNextState(stateStack.get(stateStack.size() - 1), lhs);
+                currentState = table.getNextState(stateStack.get(stateStack.size() - 1), null);
                 symbolStack.add(lhs);
                 stateStack.add(currentState);
             } else {
