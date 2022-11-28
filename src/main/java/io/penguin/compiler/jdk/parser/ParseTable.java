@@ -22,18 +22,17 @@ public class ParseTable {
     private static final Map<String, Integer> NON_TERMINAL_MAP = new HashMap<>();
 
     private final AtomicInteger maxState;
-    private AtomicInteger maxNonTerminalValue;
 
     @Data
     @Builder
     static class CacheKey {
-        private List<String> gramValue;
+        private List<String> rhs;
         private Integer readIdx;
-        private String gramKey;
+        private String lhs;
 
         public Token nextTokenOrNonTerminal() {
 
-            String s = gramValue.get(readIdx);
+            String s = rhs.get(readIdx);
             if (s.startsWith("%")) {
                 NON_TERMINAL_MAP.putIfAbsent(s, NON_TERMINAL_MAP.values().stream()
                         .min(Integer::compareTo)
@@ -48,14 +47,14 @@ public class ParseTable {
 
         public CacheKey increaseIdxWithDeepCopy() {
 
-            if (readIdx + 1 > gramValue.size()) {
+            if (readIdx + 1 > rhs.size()) {
                 return null;
             }
 
             return CacheKey.builder()
-                    .gramKey(gramKey)
+                    .lhs(lhs)
                     .readIdx(readIdx + 1)
-                    .gramValue(gramValue)
+                    .rhs(rhs)
                     .build();
         }
     }
@@ -63,7 +62,6 @@ public class ParseTable {
     public ParseTable() throws Exception {
         maxState = new AtomicInteger(0);
         stateCache = new HashMap<>();
-        maxNonTerminalValue = new AtomicInteger(0);
         init();
     }
 
@@ -76,39 +74,32 @@ public class ParseTable {
             for (Map.Entry<Integer, Set<CacheKey>> entry : ruleMap.entrySet()) {
                 table.putIfAbsent(entry.getKey(), new HashMap<>());
 
-
                 for (CacheKey current : entry.getValue()) {
                     CacheKey next = current.increaseIdxWithDeepCopy();
 
                     if (next == null) {
                         continue;
                     }
+                    stateCache.computeIfAbsent(next, (k) -> maxState.incrementAndGet());
+                    ruleMap.computeIfAbsent(stateCache.get(next), (k) -> {
+                                fin.set(true);
+                                return new HashSet<>();
+                            })
+                            .add(next);
 
-                    if (!stateCache.containsKey(next)) {
-                        int nextState = maxState.incrementAndGet();
-                        stateCache.put(next, nextState);
-                        ruleMap.computeIfAbsent(nextState, (k) -> {
-                                    fin.set(true);
-                                    return new HashSet<>();
-                                })
-                                .add(next);
-                        table.get(entry.getKey()).putIfAbsent(current.nextTokenOrNonTerminal(), nextState);
-
-                        if (fin.get()) {
-                            break;
-                        }
-                    } else {
-                        Integer state = stateCache.get(next);
-                        table.get(entry.getKey())
-                                .put(current.nextTokenOrNonTerminal(), state);
+                    table.get(entry.getKey())
+                            .put(current.nextTokenOrNonTerminal(), stateCache.get(next));
+                    if (fin.get()) {
+                        break;
                     }
                 }
-
                 if (fin.get()) {
                     break;
                 }
             }
+
         }
+
         System.out.println();
     }
 
@@ -123,8 +114,8 @@ public class ParseTable {
             grammar.getValue().forEach(j -> {
                 CacheKey cacheKey = CacheKey.builder()
                         .readIdx(0)
-                        .gramKey(grammar.getKey())
-                        .gramValue(Arrays.stream(j.split(" ")).collect(Collectors.toList()))
+                        .lhs(grammar.getKey())
+                        .rhs(Arrays.stream(j.split(" ")).collect(Collectors.toList()))
                         .build();
 
                 stateCache.put(cacheKey, 0);
