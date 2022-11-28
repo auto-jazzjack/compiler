@@ -7,7 +7,7 @@ generator:
     Decl:
       - '%Modifier %Class_Decl'
     Class_Decl:
-      - 'class'
+      - 'class %Identifier { '
     Modifier:
       - public
       - private
