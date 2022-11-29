@@ -5,8 +5,10 @@ import io.penguin.compiler.jdk.parser.generator.ParseTableGenerator;
 import io.penguin.compiler.jdk.scanner.Token;
 import lombok.Builder;
 import lombok.Data;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -17,7 +19,6 @@ public class ParseTable {
     //grammar do not need to be changed.
     private Map<Integer/*state*/, Map<Token/*token*/, Integer/*next state*/>> table;
     private Map<Integer/*state*/, Set<CacheKey>> ruleSetByState;
-    private final Map<CacheKey, Integer> stateCache;
     private static final Map<String, Integer> NON_TERMINAL_MAP = new HashMap<>();
 
     private final AtomicInteger maxState;
@@ -44,6 +45,14 @@ public class ParseTable {
             }
         }
 
+        public CacheKey deepCopy() {
+            return CacheKey.builder()
+                    .readIdx(this.readIdx)
+                    .lhs(this.lhs)
+                    .rhs(new ArrayList<>(this.rhs))
+                    .build();
+        }
+
         public CacheKey increaseIdxWithDeepCopy() {
 
             if (readIdx + 1 > rhs.size()) {
@@ -60,7 +69,6 @@ public class ParseTable {
 
     public ParseTable() throws Exception {
         maxState = new AtomicInteger(0);
-        stateCache = new HashMap<>();
         init();
     }
 
@@ -68,28 +76,40 @@ public class ParseTable {
     public void updateTableUntilNoChange() {
 
         int befSize;
+        LinkedBlockingQueue<Pair<Integer, CacheKey>> queue = ruleSetByState.get(0)
+                .stream()
+                .map(i -> Pair.of(0, i.deepCopy()))
+                .distinct()
+                .collect(Collectors.toCollection(LinkedBlockingQueue::new));
+
+
         do {
             befSize = sizeof();
-            for (Map.Entry<Integer, Set<CacheKey>> entry : ruleSetByState.entrySet()) {
-                table.putIfAbsent(entry.getKey(), new HashMap<>());
+            while (!queue.isEmpty()) {
+                Pair<Integer, CacheKey> current = queue.poll();
 
-                for (CacheKey current : entry.getValue()) {
-                    CacheKey next = current.increaseIdxWithDeepCopy();
+                CacheKey next = current.getValue().increaseIdxWithDeepCopy();
 
-                    if (next == null) {
-                        continue;
-                    }
-                    stateCache.computeIfAbsent(next, (k) -> maxState.incrementAndGet());
-                    ruleSetByState.computeIfAbsent(stateCache.get(next), (k) -> new HashSet<>())
-                            .add(next);
+                ruleSetByState.computeIfAbsent(current.getKey(), (k) -> new HashSet<>())
+                        .add(current.getValue());
 
-                    table.get(entry.getKey())
-                            .put(current.nextTokenOrNonTerminal(), stateCache.get(next));
+                if (next == null) {
+                    continue;
                 }
-                if (befSize < sizeof()) {
-                    break;
-                }
+
+                Integer nextState = Optional.ofNullable(table.get(current.getKey()))
+                        .map(i -> i.get(current.getValue().nextTokenOrNonTerminal()))
+                        .orElseGet(maxState::incrementAndGet);
+
+                table.computeIfAbsent(current.getKey(), (k) -> new HashMap<>())
+                        .put(current.getValue().nextTokenOrNonTerminal(), nextState);
+
+                queue.add(Pair.of(nextState, next));
             }
+            if (befSize < sizeof()) {
+                break;
+            }
+
 
         } while (befSize < sizeof());
 
@@ -121,7 +141,6 @@ public class ParseTable {
                         .rhs(Arrays.stream(j.split(" ")).collect(Collectors.toList()))
                         .build();
 
-                stateCache.put(cacheKey, 0);
                 ruleSetByState.computeIfAbsent(0, (k) -> new HashSet<>()).add(cacheKey);
             });
 
