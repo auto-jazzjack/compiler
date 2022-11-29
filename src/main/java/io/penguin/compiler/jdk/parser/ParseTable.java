@@ -98,9 +98,9 @@ public class ParseTable {
 
     int sizeof() {
         int retv = 0;
-        for (Map.Entry<Integer, Set<CacheKey>> i : this.ruleSetByState.entrySet()) {
+        for (Map.Entry<Integer, Map<Token/*token*/, Integer/*next state*/>> i : this.table.entrySet()) {
             retv = retv + Optional.ofNullable(i.getValue())
-                    .map(Set::size)
+                    .map(j -> j.size())
                     .orElse(0);
         }
         return retv;
