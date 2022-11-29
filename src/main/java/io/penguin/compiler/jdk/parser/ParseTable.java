@@ -7,7 +7,6 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -17,7 +16,7 @@ public class ParseTable {
 
     //grammar do not need to be changed.
     private Map<Integer/*state*/, Map<Token/*token*/, Integer/*next state*/>> table;
-    private Map<Integer/*state*/, Set<CacheKey>> ruleMap;
+    private Map<Integer/*state*/, Set<CacheKey>> ruleSetByState;
     private final Map<CacheKey, Integer> stateCache;
     private static final Map<String, Integer> NON_TERMINAL_MAP = new HashMap<>();
 
@@ -67,11 +66,11 @@ public class ParseTable {
 
 
     public void updateTableUntilNoChange() {
-        AtomicBoolean fin = new AtomicBoolean(true);
 
-        while (fin.get()) {
-            fin.set(false);
-            for (Map.Entry<Integer, Set<CacheKey>> entry : ruleMap.entrySet()) {
+        int befSize;
+        do {
+            befSize = sizeof();
+            for (Map.Entry<Integer, Set<CacheKey>> entry : ruleSetByState.entrySet()) {
                 table.putIfAbsent(entry.getKey(), new HashMap<>());
 
                 for (CacheKey current : entry.getValue()) {
@@ -81,31 +80,35 @@ public class ParseTable {
                         continue;
                     }
                     stateCache.computeIfAbsent(next, (k) -> maxState.incrementAndGet());
-                    ruleMap.computeIfAbsent(stateCache.get(next), (k) -> {
-                                fin.set(true);
-                                return new HashSet<>();
-                            })
+                    ruleSetByState.computeIfAbsent(stateCache.get(next), (k) -> new HashSet<>())
                             .add(next);
 
                     table.get(entry.getKey())
                             .put(current.nextTokenOrNonTerminal(), stateCache.get(next));
-                    if (fin.get()) {
-                        break;
-                    }
                 }
-                if (fin.get()) {
+                if (befSize < sizeof()) {
                     break;
                 }
             }
 
-        }
+        } while (befSize < sizeof());
 
         System.out.println();
     }
 
+    int sizeof() {
+        int retv = 0;
+        for (Map.Entry<Integer, Set<CacheKey>> i : this.ruleSetByState.entrySet()) {
+            retv = retv + Optional.ofNullable(i.getValue())
+                    .map(Set::size)
+                    .orElse(0);
+        }
+        return retv;
+    }
+
     public void init() throws Exception {
         table = new HashMap<>();
-        ruleMap = new HashMap<>();
+        ruleSetByState = new HashMap<>();
 
         Grammar grammars = ParseTableGenerator.readFile("");
 
@@ -119,7 +122,7 @@ public class ParseTable {
                         .build();
 
                 stateCache.put(cacheKey, 0);
-                ruleMap.computeIfAbsent(0, (k) -> new HashSet<>()).add(cacheKey);
+                ruleSetByState.computeIfAbsent(0, (k) -> new HashSet<>()).add(cacheKey);
             });
 
 
