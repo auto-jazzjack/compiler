@@ -22,6 +22,7 @@ public class ParseTable {
     private static final Map<String, Integer> NON_TERMINAL_MAP = new HashMap<>();
 
     private final AtomicInteger maxState;
+    private Grammar grammars;
 
     @Data
     @Builder
@@ -51,6 +52,30 @@ public class ParseTable {
                     .lhs(this.lhs)
                     .rhs(new ArrayList<>(this.rhs))
                     .build();
+        }
+
+        public List<CacheKey> getAllGrammarIfNonTerminal(Grammar grammars) {
+            Token token = this.nextTokenOrNonTerminal();
+            /**
+             * This is for exclude % in Nonterminal
+             * */
+            String key = token.getTokenValue().substring(1);
+
+            return grammars.getGenerator()
+                    .getV1()
+                    .get(key)
+                    .stream()
+                    .map(i -> {
+                        String[] s = i.split(" ");
+                        return CacheKey.builder()
+                                .rhs(Arrays.stream(s).collect(Collectors.toList()))
+                                .lhs(token.getTokenValue())
+                                .readIdx(0)
+                                .build();
+                    })
+                    .collect(Collectors.toList());
+
+
         }
 
         public CacheKey increaseIdxWithDeepCopy() {
@@ -101,8 +126,14 @@ public class ParseTable {
                         .map(i -> i.get(current.getValue().nextTokenOrNonTerminal()))
                         .orElseGet(maxState::incrementAndGet);
 
+                Token token = current.getValue().nextTokenOrNonTerminal();
                 table.computeIfAbsent(current.getKey(), (k) -> new HashMap<>())
-                        .put(current.getValue().nextTokenOrNonTerminal(), nextState);
+                        .put(token, nextState);
+
+                if (token.getTokenNumber() < 0) {
+                    ruleSetByState.computeIfAbsent(nextState, (k) -> new HashSet<>())
+                            .addAll(current.getValue().getAllGrammarIfNonTerminal(grammars));
+                }
 
                 queue.add(Pair.of(nextState, next));
             }
@@ -130,7 +161,7 @@ public class ParseTable {
         table = new HashMap<>();
         ruleSetByState = new HashMap<>();
 
-        Grammar grammars = ParseTableGenerator.readFile("");
+        grammars = ParseTableGenerator.readFile("");
 
         for (Map.Entry<String, List<String>> grammar : grammars.getGenerator().getV1().entrySet()) {
 
