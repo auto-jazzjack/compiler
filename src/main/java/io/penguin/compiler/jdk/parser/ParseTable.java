@@ -73,7 +73,7 @@ public class ParseTable {
                         String[] s = i.split(" ");
                         return CacheKey.builder()
                                 .rhs(Arrays.stream(s).collect(Collectors.toList()))
-                                .lhs(token.getTokenValue())
+                                .lhs(key)
                                 .readIdx(0)
                                 .build();
                     })
@@ -123,31 +123,32 @@ public class ParseTable {
                 continue;
             }
 
-            Integer nextState = Optional.ofNullable(table.get(current.getKey()))
-                    .map(i -> i.get(current.getValue().nextTokenOrNonTerminal()))
-                    .orElseGet(maxState::incrementAndGet);
+            Token token = current.getValue().nextTokenOrNonTerminal();
 
-            table.computeIfAbsent(current.getKey(), (k) -> new HashMap<>())
-                    .put(current.getValue().nextTokenOrNonTerminal(), nextState);
+            if (token.getTokenNumber() < 0) {
+                List<CacheKey> nonTerminals = current.getValue().getAllGrammarIfNonTerminal(grammars);
 
-            Token token = next.nextTokenOrNonTerminal();
-
-            ruleSetByState.computeIfAbsent(nextState, (k) -> new LinkedHashSet<>());
-
-            if (token != null && token.getTokenNumber() < 0) {
-                List<CacheKey> nonTerminals = next.getAllGrammarIfNonTerminal(grammars);
-                ruleSetByState.get(nextState).addAll(nonTerminals);
-
+                ruleSetByState.putIfAbsent(current.getKey(), new LinkedHashSet<>());
                 nonTerminals.forEach(j -> {
-                    if (!ruleSetByState.get(nextState).contains(j)) {
-                        queue.add(Pair.of(nextState, j));
+                    if (!ruleSetByState.get(current.getKey()).contains(j)) {
+                        queue.add(Pair.of(current.getKey(), j));
+                        ruleSetByState.get(current.getKey()).add(j);
                     }
                 });
 
-            }
+            } else {
+                Integer nextState = Optional.ofNullable(table.get(current.getKey()))
+                        .map(i -> i.get(current.getValue().nextTokenOrNonTerminal()))
+                        .orElseGet(maxState::incrementAndGet);
 
-            if (!ruleSetByState.get(nextState).contains(next)) {
-                queue.add(Pair.of(nextState, next));
+                table.computeIfAbsent(current.getKey(), (k) -> new HashMap<>())
+                        .put(current.getValue().nextTokenOrNonTerminal(), nextState);
+
+                ruleSetByState.putIfAbsent(nextState, new LinkedHashSet<>());
+                if (!ruleSetByState.get(nextState).contains(next)) {
+                    queue.add(Pair.of(nextState, next));
+                    ruleSetByState.get(nextState).add(next);
+                }
             }
 
         }
