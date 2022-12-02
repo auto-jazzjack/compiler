@@ -132,27 +132,23 @@ public class ParseTable {
 
             Token token = next.nextTokenOrNonTerminal();
 
+            ruleSetByState.computeIfAbsent(nextState, (k) -> new LinkedHashSet<>());
+
             if (token != null && token.getTokenNumber() < 0) {
                 List<CacheKey> nonTerminals = next.getAllGrammarIfNonTerminal(grammars);
-                ruleSetByState.computeIfAbsent(nextState, (k) -> new LinkedHashSet<>())
-                        .addAll(nonTerminals);
+                ruleSetByState.get(nextState).addAll(nonTerminals);
 
                 nonTerminals.forEach(j -> {
-
-                    Optional.ofNullable(ruleSetByState.get(nextState))
-                            .filter(k -> !k.contains(j))
-                            .ifPresent(k -> {
-                                queue.add(Pair.of(nextState, j));
-                            });
-
-
+                    if (!ruleSetByState.get(nextState).contains(j)) {
+                        queue.add(Pair.of(nextState, j));
+                    }
                 });
 
             }
 
-            Optional.ofNullable(ruleSetByState.get(nextState))
-                    .filter(k -> !k.contains(next))
-                    .ifPresent(k -> queue.add(Pair.of(nextState, next)));
+            if (!ruleSetByState.get(nextState).contains(next)) {
+                queue.add(Pair.of(nextState, next));
+            }
 
         }
 
