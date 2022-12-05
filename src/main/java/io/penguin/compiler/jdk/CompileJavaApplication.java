@@ -9,9 +9,9 @@ public class CompileJavaApplication {
         System.out.println("hello");
 
         Parser parser = new Parser();
-        AbstractTree ast = parser.createAST("public class MyClass{" +
-                "public int ab = 99;" +
-                "}");
+        AbstractTree ast = parser.createAST("public class MyClass {" +
+
+                "");
 
     }
 
