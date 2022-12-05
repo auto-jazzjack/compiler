@@ -21,7 +21,6 @@ public class ParseTable {
     private Map<Integer/*state*/, Set<CacheKey>> ruleSetByState;
     private static final Map<String, Integer> NON_TERMINAL_MAP = new HashMap<>();
 
-    private final AtomicInteger maxState;
     private Grammar grammars;
 
     @Data
@@ -97,7 +96,6 @@ public class ParseTable {
     }
 
     public ParseTable() throws Exception {
-        maxState = new AtomicInteger(0);
         init();
     }
 
@@ -110,20 +108,16 @@ public class ParseTable {
                 .distinct()
                 .collect(Collectors.toCollection(LinkedBlockingQueue::new));
 
+        AtomicInteger maxState = new AtomicInteger(0);
 
         while (!queue.isEmpty()) {
             Pair<Integer, CacheKey> current = queue.poll();
 
-            CacheKey next = current.getValue().increaseIdxWithDeepCopy();
-
-            ruleSetByState.computeIfAbsent(current.getKey(), (k) -> new LinkedHashSet<>())
-                    .add(current.getValue());
-
-            if (next == null) {
-                continue;
-            }
 
             Token token = current.getValue().nextTokenOrNonTerminal();
+            if (token == null) {
+                continue;
+            }
 
             if (token.getTokenNumber() < 0) {
                 List<CacheKey> nonTerminals = current.getValue().getAllGrammarIfNonTerminal(grammars);
@@ -136,40 +130,41 @@ public class ParseTable {
                     }
                 });
 
-            } else {
-                Integer nextState = Optional.ofNullable(table.get(current.getKey()))
-                        .map(i -> i.get(current.getValue().nextTokenOrNonTerminal()))
-                        .orElseGet(maxState::incrementAndGet);
-
-                table.computeIfAbsent(current.getKey(), (k) -> new HashMap<>())
-                        .put(current.getValue().nextTokenOrNonTerminal(), nextState);
-
-                ruleSetByState.putIfAbsent(nextState, new LinkedHashSet<>());
-                if (!ruleSetByState.get(nextState).contains(next)) {
-                    queue.add(Pair.of(nextState, next));
-                    ruleSetByState.get(nextState).add(next);
-                }
             }
+
+
+            Integer nextState = Optional.ofNullable(table.get(current.getKey()))
+                    .map(i -> i.get(token))
+                    .orElseGet(() -> {
+                        return maxState.incrementAndGet();
+                    });
+
+            CacheKey next = current.getValue().increaseIdxWithDeepCopy();
+
+            if (next == null) {
+                continue;
+            }
+
+
+            table.computeIfAbsent(current.getKey(), (k) -> new HashMap<>())
+                    .putIfAbsent(token, nextState);
+
+            ruleSetByState.putIfAbsent(nextState, new LinkedHashSet<>());
+            if (!ruleSetByState.get(nextState).contains(next)) {
+                queue.add(Pair.of(nextState, next));
+                ruleSetByState.get(nextState).add(next);
+            }
+
 
         }
 
         System.out.println();
     }
 
-    int sizeof() {
-        int retv = 0;
-        for (Map.Entry<Integer, Map<Token/*token*/, Integer/*next state*/>> i : this.table.entrySet()) {
-            retv = retv + Optional.ofNullable(i.getValue())
-                    .map(Map::size)
-                    .orElse(0);
-        }
-        return retv;
-    }
 
     public void init() throws Exception {
         table = new HashMap<>();
         ruleSetByState = new HashMap<>();
-        Set<Pair<Integer, CacheKey>> visited = new HashSet<>();
 
         grammars = ParseTableGenerator.readFile("");
 

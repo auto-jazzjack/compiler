@@ -1,23 +1,20 @@
 package io.penguin.compiler.jdk.scanner;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.util.HashMap;
 import java.util.Map;
 
 @Data
+@AllArgsConstructor
 public class Token {
     private Integer TokenNumber;
     private String TokenName;
     private String TokenValue;
 
-    public Token(Integer tokenNumber, String tokenName, String tokenValue) {
-        TokenNumber = tokenNumber;
-        TokenName = tokenName;
-        TokenValue = tokenValue;
-    }
-
     public static Map<String, Token> TOKEN_MAP;
+
     static {
         int idx = 0;
         TOKEN_MAP = new HashMap<>();
