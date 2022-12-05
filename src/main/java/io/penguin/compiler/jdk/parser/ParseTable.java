@@ -133,17 +133,22 @@ public class ParseTable {
             }
 
 
-            Integer nextState = Optional.ofNullable(table.get(current.getKey()))
-                    .map(i -> i.get(token))
-                    .orElseGet(() -> {
-                        return maxState.incrementAndGet();
-                    });
-
             CacheKey next = current.getValue().increaseIdxWithDeepCopy();
 
             if (next == null) {
                 continue;
             }
+
+            Integer nextState = Optional.ofNullable(table.get(current.getKey()))
+                    .map(i -> i.get(token))
+                    .orElseGet(() -> {
+                        return ruleSetByState.entrySet()
+                                .stream()
+                                .filter(i -> !i.getKey().equals(0) && i.getValue().contains(next))
+                                .findFirst()
+                                .map(Map.Entry::getKey)
+                                .orElseGet(() -> maxState.incrementAndGet());
+                    });
 
 
             table.computeIfAbsent(current.getKey(), (k) -> new HashMap<>())
